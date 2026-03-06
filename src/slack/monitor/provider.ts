@@ -20,6 +20,7 @@ import type { SessionScope } from "../../config/sessions.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
 import type { SlackMuxConfig } from "../../config/types.slack.js";
 import { createConnectedChannelStatusPatch } from "../../gateway/channel-status-patches.js";
+import type { SlackMuxConfig } from "../../config/types.slack.js";
 import { warn } from "../../globals.js";
 import { computeBackoff, sleepWithAbort } from "../../infra/backoff.js";
 import { installRequestBodyLimitGuard } from "../../infra/http-body.js";
