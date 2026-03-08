@@ -10,11 +10,13 @@ export function createInboundSlackTestContext(params: {
   defaultRequireMention?: boolean;
   replyToMode?: "off" | "all" | "first";
   channelsConfig?: Record<string, { systemPrompt: string }>;
+  botToken?: string | undefined;
+  muxMode?: boolean;
 }) {
   return createSlackMonitorContext({
     cfg: params.cfg,
     accountId: "default",
-    botToken: "token",
+    botToken: params.muxMode ? undefined : (params.botToken ?? "token"),
     app: { client: params.appClient ?? {} } as App,
     runtime: {} as RuntimeEnv,
     botUserId: "B1",
