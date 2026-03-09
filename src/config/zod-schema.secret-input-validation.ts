@@ -85,7 +85,9 @@ export function validateSlackSigningSecretRequirements(
   }
   forEachEnabledAccount(value.accounts, (accountId, account) => {
     const accountMode =
-      account.mode === "http" || account.mode === "socket" ? account.mode : baseMode;
+      account.mode === "http" || account.mode === "socket" || account.mode === "mux"
+        ? account.mode
+        : baseMode;
     if (accountMode !== "http") {
       return;
     }

@@ -71,6 +71,7 @@ export class MuxReceiver {
   private backoffMs = INITIAL_BACKOFF_MS;
   private pending = new Map<string, PendingApiCall>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private resolvedToken: string | null = null;
   /** Buffer events received before auth identity is initialized so that
    *  self-message and workspace/app mismatch guards are never bypassed. */
@@ -113,6 +114,10 @@ export class MuxReceiver {
   async stop(): Promise<void> {
     this.stopped = true;
     this.stopClientPing();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
       pending.reject(new Error("MuxReceiver stopped"));
@@ -227,7 +232,8 @@ export class MuxReceiver {
     this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
     this.runtime?.log?.(`slack mux reconnecting in ${delay}ms`);
 
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       if (this.stopped) {
         return;
       }

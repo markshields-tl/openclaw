@@ -164,7 +164,7 @@ export function inspectSlackAccount(params: {
           : "missing",
     configured:
       mode === "mux"
-        ? Boolean(merged.mux?.url)
+        ? Boolean(merged.mux?.url ?? params.cfg.channels?.slack?.mux?.url)
         : isHttpMode
           ? (configBot.status !== "missing" || Boolean(envBot)) &&
             configSigningSecret.status !== "missing"

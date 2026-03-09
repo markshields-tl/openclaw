@@ -20,7 +20,6 @@ import type { SessionScope } from "../../config/sessions.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
 import type { SlackMuxConfig } from "../../config/types.slack.js";
 import { createConnectedChannelStatusPatch } from "../../gateway/channel-status-patches.js";
-import type { SlackMuxConfig } from "../../config/types.slack.js";
 import { warn } from "../../globals.js";
 import { computeBackoff, sleepWithAbort } from "../../infra/backoff.js";
 import { installRequestBodyLimitGuard } from "../../infra/http-body.js";
@@ -456,6 +455,7 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
   try {
     if (slackMode === "mux") {
       await app.start();
+      publishSlackConnectedStatus(opts.setStatus);
       runtime.log?.("slack mux mode connected");
       // Now that the mux WebSocket is connected, run auth.test and update context.
       await runAuthTest();
@@ -468,9 +468,13 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
       muxReceiver?.setAuthReady();
       // Keep the function alive until abort — without this, control falls
       // through to the finally block which calls app.stop() immediately.
-      if (opts.abortSignal && !opts.abortSignal.aborted) {
+      if (!opts.abortSignal?.aborted) {
         await new Promise<void>((resolve) => {
-          opts.abortSignal!.addEventListener("abort", () => resolve(), { once: true });
+          if (opts.abortSignal) {
+            opts.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+          }
+          // If no abortSignal provided, keep running indefinitely (consistent
+          // with socket mode's while (!opts.abortSignal?.aborted) loop).
         });
       }
     } else if (slackMode === "socket") {
