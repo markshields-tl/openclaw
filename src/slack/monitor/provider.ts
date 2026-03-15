@@ -32,6 +32,7 @@ import { normalizeSlackWebhookPath, registerSlackHttpHandler } from "../http/ind
 import { MuxReceiver, installMuxApiProxy } from "../mux-receiver.js";
 import { resolveSlackChannelAllowlist } from "../resolve-channels.js";
 import { resolveSlackUserAllowlist } from "../resolve-users.js";
+import { removeMuxProxyClient, setMuxProxyClient } from "../send.js";
 import { resolveSlackAppToken, resolveSlackBotToken } from "../token.js";
 import { normalizeAllowList } from "./allow-list.js";
 import { resolveSlackSlashCommandConfig } from "./commands.js";
@@ -233,6 +234,12 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
 
   if (muxReceiver) {
     installMuxApiProxy(app as unknown as Parameters<typeof installMuxApiProxy>[0], muxReceiver);
+    // Register the proxied client so outbound sends (tool-send, announce, etc.)
+    // that don't carry an explicit client can route through the mux WebSocket.
+    setMuxProxyClient(
+      account.accountId,
+      app.client as unknown as import("@slack/web-api").WebClient,
+    );
   }
   const slackHttpHandler =
     slackMode === "http" && receiver
@@ -602,6 +609,9 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
   } finally {
     opts.abortSignal?.removeEventListener("abort", stopOnAbort);
     unregisterHttpHandler?.();
+    if (muxReceiver) {
+      removeMuxProxyClient(account.accountId);
+    }
     await app.stop().catch(() => undefined);
   }
 }

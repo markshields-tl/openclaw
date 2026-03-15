@@ -135,6 +135,21 @@ export type SlackSendResult = {
   channelId: string;
 };
 
+// ── Mux proxy client registry ─────────────────────────────────────────
+// In mux mode, outbound sends (tool-send, announce, etc.) arrive without
+// a pre-built client.  The monitor registers its proxied Bolt client here
+// so `sendMessageSlack` can look it up by accountId instead of requiring a
+// local bot token.
+const _muxClients = new Map<string, WebClient>();
+
+export function setMuxProxyClient(accountId: string, client: WebClient): void {
+  _muxClients.set(accountId, client);
+}
+
+export function removeMuxProxyClient(accountId: string): void {
+  _muxClients.delete(accountId);
+}
+
 function resolveToken(params: {
   explicit?: string;
   accountId: string;
@@ -270,8 +285,12 @@ export async function sendMessageSlack(
   });
   // When a pre-built client is provided (e.g. in mux mode where app.client is
   // the mux proxy), skip token resolution to avoid throwing on an absent token.
+  // Also check the per-account mux proxy registry so outbound sends (tool-send,
+  // announce, etc.) that don't carry an explicit client can still route through
+  // the mux WebSocket.
   const client =
     opts.client ??
+    _muxClients.get(account.accountId) ??
     createSlackWebClient(
       resolveToken({
         explicit: opts.token,

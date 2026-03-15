@@ -142,8 +142,17 @@ export class MuxReceiver {
       throw new Error("MuxReceiver: WebSocket not connected");
     }
 
+    // Strip blank token before proxying — callers in tokenless mux deployments
+    // may pass `token: ""` which causes the mux server to reject the call even
+    // when mux-side credentials are available.
+    let cleaned = params;
+    if (cleaned.token === "" || cleaned.token === undefined) {
+      const { token: _removed, ...rest } = cleaned;
+      cleaned = rest;
+    }
+
     const id = randomUUID();
-    const msg = JSON.stringify({ type: "slack_api", id, method, params });
+    const msg = JSON.stringify({ type: "slack_api", id, method, params: cleaned });
 
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
