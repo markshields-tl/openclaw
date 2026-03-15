@@ -57,13 +57,16 @@ export async function resolveSlackMessageContent(params: {
       })
     : null;
 
-  const attachmentContent = params.botToken
-    ? await resolveSlackAttachmentContent({
-        attachments: params.message.attachments,
-        token: params.botToken,
-        maxBytes: params.mediaMaxBytes,
-      })
-    : null;
+  // resolveSlackAttachmentContent extracts text/fallback from forwarded-message
+  // attachments directly from the event payload — no token required for that.
+  // In tokenless mux mode, call it without a token so text context is preserved;
+  // image downloads inside the helper are gated on token presence and will be
+  // skipped when token is absent.
+  const attachmentContent = await resolveSlackAttachmentContent({
+    attachments: params.message.attachments,
+    token: params.botToken,
+    maxBytes: params.mediaMaxBytes,
+  });
 
   const mergedMedia = [...(media ?? []), ...(attachmentContent?.media ?? [])];
   const effectiveDirectMedia = mergedMedia.length > 0 ? mergedMedia : null;

@@ -312,8 +312,11 @@ export class MuxReceiver {
 
     // Forward Slack retry metadata so Bolt handlers can detect and deduplicate
     // retried event deliveries (x-slack-retry-num / x-slack-retry-reason).
-    const retryNumRaw = msg.headers["x-slack-retry-num"];
-    const retryReason = msg.headers["x-slack-retry-reason"];
+    // Guard against older or buggy mux emitters that omit the headers field
+    // entirely — defaulting to {} avoids a TypeError in the ws message handler.
+    const headers = msg.headers ?? {};
+    const retryNumRaw = headers["x-slack-retry-num"];
+    const retryReason = headers["x-slack-retry-reason"];
     const eventId = msg.id;
     const event: ReceiverEvent = {
       body: msg.payload,
@@ -485,7 +488,17 @@ export function installMuxApiProxy(
     method: string,
     options?: Record<string, unknown>,
   ): Promise<unknown> => {
-    return receiver.apiCall(method, options ?? {});
+    // Strip blank token before forwarding — in tokenless mux deployments callers
+    // may pass `token: ""` (e.g. from ctx.botToken when no bot token is set).
+    // Forwarding an explicit empty string causes the mux server to reject the
+    // call even when mux-side credentials are available; omitting the field lets
+    // the mux server use its own credentials.
+    let params = options ?? {};
+    if (params.token === "" || params.token === undefined) {
+      const { token: _removed, ...rest } = params;
+      params = rest;
+    }
+    return receiver.apiCall(method, params);
   };
 
   // 1. Patch the top-level apiCall

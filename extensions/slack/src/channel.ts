@@ -36,6 +36,7 @@ import {
   SlackConfigSchema,
   type ChannelPlugin,
   type ResolvedSlackAccount,
+  type OpenClawConfig,
 } from "openclaw/plugin-sdk/slack";
 import { getSlackRuntime } from "./runtime.js";
 
@@ -58,10 +59,13 @@ function getTokenForOperation(
   return botToken ?? userToken;
 }
 
-function isSlackAccountConfigured(account: ResolvedSlackAccount): boolean {
+function isSlackAccountConfigured(account: ResolvedSlackAccount, cfg?: OpenClawConfig): boolean {
   const mode = account.config.mode ?? "socket";
   if (mode === "mux") {
-    return Boolean(account.config.mux?.url);
+    // Account config is shallow-merged, so an account override like
+    // `accounts.work.mux={token:"..."}` drops the base `channels.slack.mux.url`.
+    // Fall back to the base config URL so inherited-URL setups aren't misclassified.
+    return Boolean(account.config.mux?.url ?? cfg?.channels?.slack?.mux?.url);
   }
   const hasBotToken = Boolean(account.botToken?.trim());
   if (!hasBotToken) {
@@ -156,12 +160,12 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
   configSchema: buildChannelConfigSchema(SlackConfigSchema),
   config: {
     ...slackConfigBase,
-    isConfigured: (account) => isSlackAccountConfigured(account),
-    describeAccount: (account) => ({
+    isConfigured: (account, cfg) => isSlackAccountConfigured(account, cfg),
+    describeAccount: (account, cfg) => ({
       accountId: account.accountId,
       name: account.name,
       enabled: account.enabled,
-      configured: isSlackAccountConfigured(account),
+      configured: isSlackAccountConfigured(account, cfg),
       botTokenSource: account.botTokenSource,
       appTokenSource: account.appTokenSource,
     }),
@@ -428,7 +432,7 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
       }
       return await getSlackRuntime().channel.slack.probeSlack(token, timeoutMs);
     },
-    buildAccountSnapshot: ({ account, runtime, probe }) => {
+    buildAccountSnapshot: ({ account, cfg, runtime, probe }) => {
       const mode = account.config.mode ?? "socket";
       const configured =
         (mode === "http"
@@ -439,7 +443,7 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
           : resolveConfiguredFromRequiredCredentialStatuses(account, [
               "botTokenStatus",
               "appTokenStatus",
-            ])) ?? isSlackAccountConfigured(account);
+            ])) ?? isSlackAccountConfigured(account, cfg);
       const base = buildComputedAccountStatusSnapshot({
         accountId: account.accountId,
         name: account.name,
