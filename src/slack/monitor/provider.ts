@@ -454,7 +454,40 @@ export async function monitorSlackProvider(opts: MonitorSlackOpts = {}) {
 
   try {
     if (slackMode === "mux") {
-      await app.start();
+      // Retry mux startup on transient connect failures (boot-time mux
+      // unavailability should not permanently kill the channel via the gateway's
+      // finite auto-restart budget).  Use the same policy as socket mode.
+      // Auth errors are still treated as permanent failures (fail fast).
+      let muxStartAttempts = 0;
+      while (!opts.abortSignal?.aborted) {
+        try {
+          await app.start();
+          break;
+        } catch (err) {
+          if (isNonRecoverableSlackAuthError(err)) {
+            runtime.error?.(
+              `slack mux mode failed to start due to non-recoverable auth error — skipping channel (${formatUnknownError(err)})`,
+            );
+            throw err;
+          }
+          muxStartAttempts += 1;
+          if (
+            SLACK_SOCKET_RECONNECT_POLICY.maxAttempts > 0 &&
+            muxStartAttempts >= SLACK_SOCKET_RECONNECT_POLICY.maxAttempts
+          ) {
+            throw err;
+          }
+          const delayMs = computeBackoff(SLACK_SOCKET_RECONNECT_POLICY, muxStartAttempts);
+          runtime.error?.(
+            `slack mux mode failed to start. retry ${muxStartAttempts}/${SLACK_SOCKET_RECONNECT_POLICY.maxAttempts || "∞"} in ${Math.round(delayMs / 1000)}s (${formatUnknownError(err)})`,
+          );
+          try {
+            await sleepWithAbort(delayMs, opts.abortSignal);
+          } catch {
+            break;
+          }
+        }
+      }
       publishSlackConnectedStatus(opts.setStatus);
       runtime.log?.("slack mux mode connected");
       // Now that the mux WebSocket is connected, run auth.test and update context.
